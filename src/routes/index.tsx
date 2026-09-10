@@ -557,9 +557,14 @@ function Index() {
             await checkpoint();
           }
         }
-      })().then(() => {
-        promptingDone = true;
-      });
+      })()
+        .catch((e) => {
+          console.error("[client] prompt stage crashed:", e);
+        })
+        .then(() => {
+          console.log("[client] prompt stage finished");
+          promptingDone = true;
+        });
 
       // Adaptive throttle: back off globally when the provider rate-limits.
       let cooldownUntil = 0;
