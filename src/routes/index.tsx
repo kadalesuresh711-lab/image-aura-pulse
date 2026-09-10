@@ -616,6 +616,10 @@ function Index() {
               record(g.seg.index, { status: "error", prompt: g.prompt, error: msg });
             }
           };
+          const batchStart = Date.now();
+          console.log(
+            `[client] worker ${me} drawing panels ${group.map((g) => g.seg.index + 1).join(",")} · queue=${queue.length}`,
+          );
           try {
             const { results } = await drawBatch({
               data: {
