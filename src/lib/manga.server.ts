@@ -587,6 +587,10 @@ export async function writePrompts(
     built.push("");
   }
 
+  const empties = built.filter((p) => !p.trim()).length;
+  console.log(
+    `[prompts] DONE lines ${from}-${to} in ${Date.now() - t0}ms: ${built.length - empties}/${count} written, ${empties} empty`,
+  );
   return chainContinuity(built);
 }
 
