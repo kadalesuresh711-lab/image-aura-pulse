@@ -1307,8 +1307,10 @@ export async function generateImage(
       } else {
         lastErr = `${res.status} ${await res.text().catch(() => "")}`.slice(0, 300);
       }
+      if (lastErr) console.warn(`[pixazo] seed=${seed} attempt ${attempt + 1}: ${lastErr}`);
     } catch (e) {
       lastErr = e instanceof Error ? e.message : String(e);
+      console.warn(`[pixazo] seed=${seed} attempt ${attempt + 1} threw: ${lastErr}`);
     }
     await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
   }
