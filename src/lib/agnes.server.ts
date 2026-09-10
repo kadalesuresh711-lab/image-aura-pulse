@@ -104,6 +104,10 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
     let lastErr = "";
 
     for (let attempt = 0; attempt < attempts; attempt++) {
+      const started = Date.now();
+      console.log(
+        `[agnes] request attempt ${attempt + 1}/${attempts} model=${model()} inChars=${user.length} maxOut=${Math.min(MAX_OUT, opts.maxOutputTokens ?? 16_000)} inFlight=${inFlight}`,
+      );
       try {
       const res = await fetch(API, {
         method: "POST",
