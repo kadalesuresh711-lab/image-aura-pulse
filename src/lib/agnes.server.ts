@@ -104,6 +104,10 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
     let lastErr = "";
 
     for (let attempt = 0; attempt < attempts; attempt++) {
+      const started = Date.now();
+      console.log(
+        `[agnes] request attempt ${attempt + 1}/${attempts} model=${model()} inChars=${user.length} maxOut=${Math.min(MAX_OUT, opts.maxOutputTokens ?? 16_000)} inFlight=${inFlight}`,
+      );
       try {
       const res = await fetch(API, {
         method: "POST",
@@ -136,6 +140,9 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
 
         if (res.ok) {
           const { text, err } = await readStream(res);
+          console.log(
+            `[agnes] attempt ${attempt + 1} ok=200 outChars=${text.length} in ${Date.now() - started}ms${err ? ` streamError=${JSON.stringify(err).slice(0, 200)}` : ""}`,
+          );
           if (text) return text;
           lastErr = err
             ? `${err.code ?? "error"} ${err.message ?? ""}`.trim()
@@ -146,6 +153,10 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
 
         const body = (await res.text().catch(() => "")).slice(0, 600);
         lastErr = `${res.status} ${body}`;
+        console.error(
+          `[agnes] attempt ${attempt + 1} HTTP ${res.status} in ${Date.now() - started}ms: ${body.slice(0, 300)}`,
+        );
+
 
         if (busy(res.status, body)) {
           const retryAfter = Number(res.headers.get("retry-after") ?? 0);
@@ -156,6 +167,7 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
         await sleep(1_200 * (attempt + 1));
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
+        console.error(`[agnes] attempt ${attempt + 1} threw after ${Date.now() - started}ms: ${lastErr}`);
         await sleep(1_000 * (attempt + 1));
       }
     }

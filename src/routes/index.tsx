@@ -183,6 +183,10 @@ type PromptRequest = {
  * requests alive; only the final result event is exposed to the pipeline.
  */
 async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> {
+  const label = `${input.from}-${input.to}`;
+  const t0 = Date.now();
+  let events = 0;
+  console.log(`[client] prompts request ${label} started`);
   const controller = new AbortController();
   let idleTimer = window.setTimeout(() => controller.abort("Prompt stream stopped responding"), PROMPT_IDLE_TIMEOUT_MS);
   const activity = () => {
@@ -221,7 +225,9 @@ async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> 
       if (line.startsWith("data:")) data.push(line.slice(5).trim());
     }
     if (data.length === 0) return;
+    events++;
     const payload = JSON.parse(data.join("\n")) as { prompts?: string[]; error?: string };
+    console.log(`[client] prompts ${label} event "${event}" at ${Date.now() - t0}ms`);
     if (event === "result" && Array.isArray(payload.prompts)) result = payload.prompts;
     if (event === "failure") failure = payload.error || "Prompt generation failed";
   };
@@ -232,6 +238,10 @@ async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> 
       chunk = await reader.read();
     } catch (error) {
       window.clearTimeout(idleTimer);
+      console.error(
+        `[client] prompts ${label} read error at ${Date.now() - t0}ms after ${events} events:`,
+        error,
+      );
       if (controller.signal.aborted) throw new Error("Prompt service stopped responding; this range will retry.");
       throw error;
     }
@@ -245,8 +255,18 @@ async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> 
   }
   window.clearTimeout(idleTimer);
   if (buffer.trim()) consume(buffer);
-  if (failure) throw new Error(failure);
-  if (!result) throw new Error("Prompt stream ended before returning prompts");
+  if (failure) {
+    console.error(`[client] prompts ${label} FAILED at ${Date.now() - t0}ms: ${failure}`);
+    throw new Error(failure);
+  }
+  if (!result) {
+    console.error(`[client] prompts ${label} stream ended with no result at ${Date.now() - t0}ms`);
+    throw new Error("Prompt stream ended before returning prompts");
+  }
+  const written = result.filter((p) => p && p.trim()).length;
+  console.log(
+    `[client] prompts ${label} done in ${Date.now() - t0}ms: ${written}/${result.length} written`,
+  );
   return { prompts: result };
 }
 
@@ -465,6 +485,9 @@ function Index() {
       }));
 
       const promptStage = (async () => {
+        console.log(
+          `[client] prompt stage: ${ranges.length} ranges for ${needPrompts.length} lines of ${total}`,
+        );
         for (const range of ranges) {
           if (cancelRef.current) break;
           const targets = list.filter(
@@ -495,6 +518,7 @@ function Index() {
             });
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
+            console.error(`[client] range ${range.from}-${range.to} failed: ${msg}`);
             targets.forEach((s) => record(s.index, { status: "error", error: msg }));
           }
           promptDone += targets.length;
@@ -508,6 +532,7 @@ function Index() {
         for (let round = 0; round < 5; round++) {
           if (cancelRef.current) break;
           const missing = list.filter((s) => !hasPrompt(s.prompt));
+          console.log(`[client] repair round ${round + 1}: ${missing.length} lines still without a prompt`);
           if (missing.length === 0) break;
           // One line per request: a mixed, non-contiguous group is exactly how a
           // prompt written for another timestamp landed on this panel.
@@ -532,9 +557,14 @@ function Index() {
             await checkpoint();
           }
         }
-      })().then(() => {
-        promptingDone = true;
-      });
+      })()
+        .catch((e) => {
+          console.error("[client] prompt stage crashed:", e);
+        })
+        .then(() => {
+          console.log("[client] prompt stage finished");
+          promptingDone = true;
+        });
 
       // Adaptive throttle: back off globally when the provider rate-limits.
       let cooldownUntil = 0;
@@ -544,12 +574,25 @@ function Index() {
       // silently never happened. This is what made retries look broken.
       let inFlight = 0;
 
+      let workerId = 0;
       const worker = async () => {
+        const me = ++workerId;
+        let idleLogged = 0;
+        console.log(`[client] worker ${me} started`);
         for (;;) {
           if (cancelRef.current) return;
           const group = queue.splice(0, IMAGE_BATCH);
           if (group.length === 0) {
-            if (promptingDone && inFlight === 0) return;
+            if (promptingDone && inFlight === 0) {
+              console.log(`[client] worker ${me} exiting (queue empty)`);
+              return;
+            }
+            if (Date.now() - idleLogged > 20000) {
+              idleLogged = Date.now();
+              console.log(
+                `[client] worker ${me} idle · queue=${queue.length} inFlight=${inFlight} promptingDone=${promptingDone}`,
+              );
+            }
             await new Promise((r) => setTimeout(r, 150));
             continue;
           }
@@ -573,6 +616,10 @@ function Index() {
               record(g.seg.index, { status: "error", prompt: g.prompt, error: msg });
             }
           };
+          const batchStart = Date.now();
+          console.log(
+            `[client] worker ${me} drawing panels ${group.map((g) => g.seg.index + 1).join(",")} · queue=${queue.length}`,
+          );
           try {
             const { results } = await drawBatch({
               data: {
@@ -635,12 +682,16 @@ function Index() {
             );
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
+            console.error(`[client] worker ${me} batch failed after ${Date.now() - batchStart}ms: ${msg}`);
             group.forEach((g) => requeue(g, msg));
           } finally {
             inFlight--;
           }
           // Count finished panels only — re-queued jobs must not inflate it.
           drawn = list.filter((s) => s.status === "done").length;
+          console.log(
+            `[client] worker ${me} batch done in ${Date.now() - batchStart}ms · panels ${drawn}/${total} · queue=${queue.length}`,
+          );
           tick();
           persist();
 

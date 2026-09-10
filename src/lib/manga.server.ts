@@ -507,20 +507,38 @@ export async function writePrompts(
   };
 
   // ONE request for the whole range.
+  const t0 = Date.now();
+  console.log(`[prompts] START lines ${from}-${to} (${count} lines)`);
   try {
-    absorb(await ask(wanted, 0.7), wanted);
+    const raw = await ask(wanted, 0.7);
+    console.log(
+      `[prompts] main answer for ${from}-${to}: ${raw.length} chars in ${Date.now() - t0}ms`,
+    );
+    absorb(raw, wanted);
+    console.log(`[prompts] after main pass ${from}-${to}: ${byNumber.size}/${count} filled`);
   } catch (e) {
-    console.error("writePrompts pass failed:", e instanceof Error ? e.message : e);
+    console.error(
+      `[prompts] main pass FAILED ${from}-${to} after ${Date.now() - t0}ms:`,
+      e instanceof Error ? e.message : e,
+    );
   }
 
   // Repair only what is genuinely missing (a truncated answer), in as few
   // extra requests as possible: one request for all the gaps together.
   const gap = wanted.filter((n) => !byNumber.has(n));
   if (gap.length > 0 && gap.length < wanted.length) {
+    const t1 = Date.now();
+    console.log(`[prompts] repair pass for ${gap.length} gaps in ${from}-${to}`);
     try {
       absorb(await ask(gap, 0.5), gap);
+      console.log(
+        `[prompts] after repair ${from}-${to}: ${byNumber.size}/${count} filled in ${Date.now() - t1}ms`,
+      );
     } catch (e) {
-      console.error("writePrompts repair failed:", e instanceof Error ? e.message : e);
+      console.error(
+        `[prompts] repair FAILED ${from}-${to} after ${Date.now() - t1}ms:`,
+        e instanceof Error ? e.message : e,
+      );
     }
   }
 
@@ -569,6 +587,10 @@ export async function writePrompts(
     built.push("");
   }
 
+  const empties = built.filter((p) => !p.trim()).length;
+  console.log(
+    `[prompts] DONE lines ${from}-${to} in ${Date.now() - t0}ms: ${built.length - empties}/${count} written, ${empties} empty`,
+  );
   return chainContinuity(built);
 }
 
@@ -1285,8 +1307,10 @@ export async function generateImage(
       } else {
         lastErr = `${res.status} ${await res.text().catch(() => "")}`.slice(0, 300);
       }
+      if (lastErr) console.warn(`[pixazo] seed=${seed} attempt ${attempt + 1}: ${lastErr}`);
     } catch (e) {
       lastErr = e instanceof Error ? e.message : String(e);
+      console.warn(`[pixazo] seed=${seed} attempt ${attempt + 1} threw: ${lastErr}`);
     }
     await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
   }

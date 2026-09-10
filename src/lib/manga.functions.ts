@@ -98,6 +98,9 @@ export const renderBatch = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
+    const t0 = Date.now();
+    const idx = data.jobs.map((j) => j.index).join(",");
+    console.log(`[render] batch START panels ${idx}`);
     const results = await Promise.all(
       data.jobs.map(async (job) => {
         try {
@@ -114,13 +117,19 @@ export const renderBatch = createServerFn({ method: "POST" })
           );
           return { index: job.index, url, prompt, rewritten };
         } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`[render] panel ${job.index} failed: ${msg}`);
           return {
             index: job.index,
             url: null as string | null,
-            error: e instanceof Error ? e.message : String(e),
+            error: msg,
           };
         }
       }),
+    );
+    const ok = results.filter((r) => r.url).length;
+    console.log(
+      `[render] batch DONE panels ${idx} in ${Date.now() - t0}ms: ${ok}/${results.length} rendered`,
     );
     return { results };
   });
