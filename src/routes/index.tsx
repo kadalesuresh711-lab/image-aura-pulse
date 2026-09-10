@@ -574,12 +574,25 @@ function Index() {
       // silently never happened. This is what made retries look broken.
       let inFlight = 0;
 
+      let workerId = 0;
       const worker = async () => {
+        const me = ++workerId;
+        let idleLogged = 0;
+        console.log(`[client] worker ${me} started`);
         for (;;) {
           if (cancelRef.current) return;
           const group = queue.splice(0, IMAGE_BATCH);
           if (group.length === 0) {
-            if (promptingDone && inFlight === 0) return;
+            if (promptingDone && inFlight === 0) {
+              console.log(`[client] worker ${me} exiting (queue empty)`);
+              return;
+            }
+            if (Date.now() - idleLogged > 20000) {
+              idleLogged = Date.now();
+              console.log(
+                `[client] worker ${me} idle · queue=${queue.length} inFlight=${inFlight} promptingDone=${promptingDone}`,
+              );
+            }
             await new Promise((r) => setTimeout(r, 150));
             continue;
           }
