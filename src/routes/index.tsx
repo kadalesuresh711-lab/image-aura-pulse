@@ -532,6 +532,7 @@ function Index() {
         for (let round = 0; round < 5; round++) {
           if (cancelRef.current) break;
           const missing = list.filter((s) => !hasPrompt(s.prompt));
+          console.log(`[client] repair round ${round + 1}: ${missing.length} lines still without a prompt`);
           if (missing.length === 0) break;
           // One line per request: a mixed, non-contiguous group is exactly how a
           // prompt written for another timestamp landed on this panel.
