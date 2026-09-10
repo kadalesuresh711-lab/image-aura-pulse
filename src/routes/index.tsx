@@ -183,6 +183,10 @@ type PromptRequest = {
  * requests alive; only the final result event is exposed to the pipeline.
  */
 async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> {
+  const label = `${input.from}-${input.to}`;
+  const t0 = Date.now();
+  let events = 0;
+  console.log(`[client] prompts request ${label} started`);
   const controller = new AbortController();
   let idleTimer = window.setTimeout(() => controller.abort("Prompt stream stopped responding"), PROMPT_IDLE_TIMEOUT_MS);
   const activity = () => {
