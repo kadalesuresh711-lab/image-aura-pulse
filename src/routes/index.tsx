@@ -225,7 +225,9 @@ async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> 
       if (line.startsWith("data:")) data.push(line.slice(5).trim());
     }
     if (data.length === 0) return;
+    events++;
     const payload = JSON.parse(data.join("\n")) as { prompts?: string[]; error?: string };
+    console.log(`[client] prompts ${label} event "${event}" at ${Date.now() - t0}ms`);
     if (event === "result" && Array.isArray(payload.prompts)) result = payload.prompts;
     if (event === "failure") failure = payload.error || "Prompt generation failed";
   };
@@ -236,6 +238,10 @@ async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> 
       chunk = await reader.read();
     } catch (error) {
       window.clearTimeout(idleTimer);
+      console.error(
+        `[client] prompts ${label} read error at ${Date.now() - t0}ms after ${events} events:`,
+        error,
+      );
       if (controller.signal.aborted) throw new Error("Prompt service stopped responding; this range will retry.");
       throw error;
     }
@@ -249,8 +255,18 @@ async function getPrompts(input: PromptRequest): Promise<{ prompts: string[] }> 
   }
   window.clearTimeout(idleTimer);
   if (buffer.trim()) consume(buffer);
-  if (failure) throw new Error(failure);
-  if (!result) throw new Error("Prompt stream ended before returning prompts");
+  if (failure) {
+    console.error(`[client] prompts ${label} FAILED at ${Date.now() - t0}ms: ${failure}`);
+    throw new Error(failure);
+  }
+  if (!result) {
+    console.error(`[client] prompts ${label} stream ended with no result at ${Date.now() - t0}ms`);
+    throw new Error("Prompt stream ended before returning prompts");
+  }
+  const written = result.filter((p) => p && p.trim()).length;
+  console.log(
+    `[client] prompts ${label} done in ${Date.now() - t0}ms: ${written}/${result.length} written`,
+  );
   return { prompts: result };
 }
 
