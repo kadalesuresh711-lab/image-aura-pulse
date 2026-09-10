@@ -518,6 +518,7 @@ function Index() {
             });
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
+            console.error(`[client] range ${range.from}-${range.to} failed: ${msg}`);
             targets.forEach((s) => record(s.index, { status: "error", error: msg }));
           }
           promptDone += targets.length;
