@@ -485,6 +485,9 @@ function Index() {
       }));
 
       const promptStage = (async () => {
+        console.log(
+          `[client] prompt stage: ${ranges.length} ranges for ${needPrompts.length} lines of ${total}`,
+        );
         for (const range of ranges) {
           if (cancelRef.current) break;
           const targets = list.filter(
