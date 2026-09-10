@@ -98,6 +98,9 @@ export const renderBatch = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
+    const t0 = Date.now();
+    const idx = data.jobs.map((j) => j.index).join(",");
+    console.log(`[render] batch START panels ${idx}`);
     const results = await Promise.all(
       data.jobs.map(async (job) => {
         try {
