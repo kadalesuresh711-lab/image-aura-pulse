@@ -140,6 +140,9 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
 
         if (res.ok) {
           const { text, err } = await readStream(res);
+          console.log(
+            `[agnes] attempt ${attempt + 1} ok=200 outChars=${text.length} in ${Date.now() - started}ms${err ? ` streamError=${JSON.stringify(err).slice(0, 200)}` : ""}`,
+          );
           if (text) return text;
           lastErr = err
             ? `${err.code ?? "error"} ${err.message ?? ""}`.trim()
@@ -150,6 +153,10 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
 
         const body = (await res.text().catch(() => "")).slice(0, 600);
         lastErr = `${res.status} ${body}`;
+        console.error(
+          `[agnes] attempt ${attempt + 1} HTTP ${res.status} in ${Date.now() - started}ms: ${body.slice(0, 300)}`,
+        );
+
 
         if (busy(res.status, body)) {
           const retryAfter = Number(res.headers.get("retry-after") ?? 0);
