@@ -167,6 +167,7 @@ async function callAgnes(user: string, opts: ChatOptions): Promise<string> {
         await sleep(1_200 * (attempt + 1));
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
+        console.error(`[agnes] attempt ${attempt + 1} threw after ${Date.now() - started}ms: ${lastErr}`);
         await sleep(1_000 * (attempt + 1));
       }
     }
