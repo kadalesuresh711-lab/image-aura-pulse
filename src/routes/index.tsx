@@ -682,12 +682,16 @@ function Index() {
             );
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
+            console.error(`[client] worker ${me} batch failed after ${Date.now() - batchStart}ms: ${msg}`);
             group.forEach((g) => requeue(g, msg));
           } finally {
             inFlight--;
           }
           // Count finished panels only — re-queued jobs must not inflate it.
           drawn = list.filter((s) => s.status === "done").length;
+          console.log(
+            `[client] worker ${me} batch done in ${Date.now() - batchStart}ms · panels ${drawn}/${total} · queue=${queue.length}`,
+          );
           tick();
           persist();
 
